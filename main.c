@@ -24,7 +24,7 @@ GPIO_InitTypeDef			GPIO_InitStructure;
 NVIC_InitTypeDef         	DACNVIC_InitStructure;
 
 
-#define ARRAYSIZE 3*4
+#define ARRAYSIZE 3
 #define ADC1_DR    ((uint32_t)0x4001244C)
 volatile uint16_t ADC_values[ARRAYSIZE];
 volatile uint32_t status = 0;
@@ -113,7 +113,7 @@ int main(void)
     InitADC();
     InitDMA();
 
-    ADC_values[0]=12345670;
+    //ADC_values[0]=12345670;
     //Enable DMA1 Channel transfer
     DMA_Cmd(DMA1_Channel1, ENABLE);
     //Start ADC1 Software Conversion
@@ -255,7 +255,7 @@ void InitADC()
 		      //right 12-bit data alignment in ADC data register
 		      ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
 		      //8 channels conversion
-		      ADC_InitStructure.ADC_NbrOfConversion = 3;
+		      ADC_InitStructure.ADC_NbrOfConversion = ARRAYSIZE;
 		      //load structure values to control and status registers
 		      ADC_Init(ADC1, &ADC_InitStructure);
 		      //wake up temperature sensor
@@ -317,7 +317,7 @@ void InitDMA()
 	    DMA_InitStructure.DMA_BufferSize = ARRAYSIZE;
 	    //source and destination start addresses
 	    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)ADC1_DR;
-	    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)ADC_values;
+	    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&ADC_values[0];
 	    //send values to DMA registers
 	    DMA_Init(DMA1_Channel1, &DMA_InitStructure);
 	    // Enable DMA1 Channel Transfer Complete interrupt
@@ -350,12 +350,7 @@ void TIM2_IRQHandler()
     	 	 	  accumulator1+=accumulator1r;
     	    	  //  first 10 (32 -22) bits -> lut table index
     	    	  accumulator1angle=(uint16_t)(accumulator1>>22);
-    	    	  /*
-    	    	  if (accumulator1angle>=1024)
-    	    	  {
-    	    		  accumulator1angle-=1024;
-    	    	  }
-    	    	  */
+
     	    	  accumulator1step = Sine1024_12bit[accumulator1angle];
 
     	    	  accumulator2+=accumulator2r;
@@ -370,21 +365,28 @@ void TIM2_IRQHandler()
 
     	    	  {
     	    	  DAC1OutputData = (uint16_t)
-    	    			  (accumulator1step+accumulator1step+accumulator1step)/3.0;
+    	    			  (accumulator1step+accumulator2step+accumulator3step)/3.0;
     	    	  }
 
     	    	  // sending 12-bits output signal
     	    	  DAC_SetChannel1Data(DAC_Align_12b_R,DAC1OutputData);
+
     	    	  // changing accumulator register in time ....
 
-
-    	    	  accumulator1r+=R>>6;
-    	    	 // accumulator2r-=R>>4;
-    	    	  //accumulator3r+=R>>8;
     	    	  /*
+    	    	  accumulator1r+=R>>6;
+    	    	  accumulator2r-=R>>4;
+    	    	  accumulator3r+=R>>8;
+    	    	  */
+    	    	  // reading value of pots from ADC_value table
     	    	  accumulator1r=(uint32_t)257374*
-    	    	     	    	  	  		rangeScaleLinear(ADC_values[0],0,4095,10,5000);
-				*/
+    	    	     	    	  	  		rangeScaleLinear(ADC_values[0],0,4095,100,5000);
+    	    	  accumulator2r=(uint32_t)257374*
+    	    	     	    	     	    rangeScaleLinear(ADC_values[1],0,4095,100,5000);
+
+    	    	  accumulator3r=(uint32_t)257374*
+    	    	     	    	     	    	rangeScaleLinear(ADC_values[2],0,4095,100,5000);
+
     	    	  TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
 
 
