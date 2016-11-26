@@ -1,10 +1,10 @@
 /**
   ******************************************************************************
   * @file    main.c
-  * @author  J.Shankarappa
+  * @author  K.Pudlowski
   * @version V0.0.1
-  * @date    5-April-2013
-  * @brief   Blink LED Program for STM32L-Discovery Board
+  * @date    26-11-2016
+  * @brief   DAC, ADC, audio purpose  code for STM32L-Discovery Board
   ******************************************************************************
   */
 
@@ -65,7 +65,7 @@ void Delay(__IO uint32_t nTime);
 
 void InitDAC();
 void InitADC();
-void InitDMA();
+
 static __IO uint32_t TimingDelay;
 
 int main(void)
@@ -97,47 +97,23 @@ int main(void)
     //SysTick_Config(SystemCoreClock / 1000);  // SysTick for every  1-miliSec
 
     GPIO_WriteBit(GPIOC, GPIO_Pin_8, Bit_SET);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_9, Bit_RESET);
-    /*
-    Delay(100000);
     GPIO_WriteBit(GPIOC, GPIO_Pin_9, Bit_SET);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_8, Bit_RESET);
-    Delay(100000);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_8, Bit_SET);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_9, Bit_RESET);
-    Delay(100000);
-	*/
+
     lutindex=0;
+
+    /* Enable The HSI (16Mhz) */
+    RCC_HSICmd(ENABLE);
+
+    /* Check that HSI oscillator is ready */
+    while(RCC_GetFlagStatus(RCC_FLAG_HSIRDY) == RESET);
 
     InitDAC();
     InitADC();
-    InitDMA();
 
-    //ADC_values[0]=12345670;
-    //Enable DMA1 Channel transfer
-    DMA_Cmd(DMA1_Channel1, ENABLE);
-    //Start ADC1 Software Conversion
-    ADC_SoftwareStartConv(ADC1);
 
   // endless loop
     while(1) {
 
-    	//GPIO_TOGGLE(GPIOC,GPIO_Pin_8);
-    	//GPIO_TOGGLE(GPIOC,GPIO_Pin_9);
-
-    	//Delay(100);
-    	/*
-    	lutindex++;
-    	if (lutindex>=1024)
-		{
-    		lutindex-=1024;
-
-    	}
-
-    	DAC1OutputData=Sine1024_12bit[lutindex];
-
-    	DAC_SetChannel1Data(DAC_Align_12b_R,DAC1OutputData);
-    	*/
     }
 }
 
@@ -205,8 +181,8 @@ void InitDAC()
 		        TTB.TIM_CounterMode = TIM_CounterMode_Up;
 		        //TTB.TIM_RepetitionCounter = 0;
 		        TTB.TIM_ClockDivision = 0;
-		        TTB.TIM_Prescaler = 10; //  4800 kHz // was 300-1
-		        TTB.TIM_Period = 10; //1Hz; // was 10-1
+		        TTB.TIM_Prescaler = 1; //  4800 kHz // was 300-1
+		        TTB.TIM_Period = 1; //1Hz; // was 10-1
 
 		        TIM_TimeBaseInit(TIM2, &TTB);
 		        TIM_Cmd(TIM2, ENABLE);
@@ -223,6 +199,8 @@ void InitDAC()
 		        NVIC_EnableIRQ (TIM2_IRQn);
 		        DACNVIC_InitStructure.NVIC_IRQChannel = TIM2_IRQn;
 		       // DACNVIC_InitStructure.NVIC_IRQChannelPriority = 0;
+		        DACNVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+		        DACNVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
 		        DACNVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
 		        NVIC_Init(&DACNVIC_InitStructure);
 }
@@ -230,20 +208,56 @@ void InitDAC()
 
 void InitADC()
 {
+	/*
+	https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=%2Fpublic%2FSTe2ecommunities%2Fmcu%2FLists%2Fcortex%5Fmx%5Fstm32%2FMultiple%20Channel%20ADC%20on%20STM32%20L1%20Discovery%20with%20CooCox&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=359
+	*/
+	ADC_CommonInitTypeDef ADC_CommonInitStructure;
+    ADC_InitTypeDef ADC_InitStructure;
+    DMA_InitTypeDef DMA_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
 
-		  //--Enable ADC1 and GPIOA--
-		     // RCC_APB1PeriphClockCmd(RCC_APB1Periph_ADC1 | RCC_APB1Periph_GPIOA, ENABLE);
-		      RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+		  //Enable GPIOA--
+
+
 		      RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
 		      GPIO_InitTypeDef GPIO_InitStructure; //Variable used to setup the GPIO pins
-		      //==Configure ADC pins (PA0 -> Channel 0 to PA7 -> Channel 7) as analog inputs==
+		      //==Configure ADC pins (PA0 -> Channel 0 to PA1 -> Channel 1) as analog inputs==
 		      GPIO_StructInit(&GPIO_InitStructure); // Reset init structure, if not it can cause issues...
-		      GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1| GPIO_Pin_2| GPIO_Pin_3| GPIO_Pin_4| GPIO_Pin_5| GPIO_Pin_6| GPIO_Pin_7;
+		      GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1| GPIO_Pin_2| GPIO_Pin_3;
 		      GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
 		      GPIO_Init(GPIOA, &GPIO_InitStructure);
 
-		      ADC_InitTypeDef ADC_InitStructure;
+
+
+		      /* Enable the DMA Stream IRQ Channel */
+		        NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel1_IRQn;
+		        NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+		        NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+		        NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+		        NVIC_Init(&NVIC_InitStructure);
+
+		      //Enable ADC1
+		      RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+
 		      //ADC1 configuration
+
+		      /* Clear  ADC configuration   */
+		       ADC_DeInit(ADC1);
+
+		       ADC_CommonStructInit(&ADC_CommonInitStructure);
+		       ADC_CommonInitStructure.ADC_Prescaler = ADC_Prescaler_Div4;
+		       ADC_CommonInit(&ADC_CommonInitStructure);
+
+
+		       /* ADC Configuration */
+		       ADC_InitStructure.ADC_Resolution = ADC_Resolution_12b;
+		       ADC_InitStructure.ADC_ScanConvMode = ENABLE; // Multiple channels
+		       ADC_InitStructure.ADC_ContinuousConvMode = ENABLE; // Continuously back-to-back, not triggered
+		       ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None; // Not triggered
+		       ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T9_CC2; // Not used, valid placeholder
+		       ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+		       ADC_InitStructure.ADC_NbrOfConversion = ARRAYSIZE; // =3
+		       ADC_Init(ADC1,&ADC_InitStructure);
 
 		     // ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;
 		      //We will convert multiple channels
@@ -254,83 +268,66 @@ void InitADC()
 		      ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
 		      //right 12-bit data alignment in ADC data register
 		      ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
-		      //8 channels conversion
+		      //83 channels conversion
 		      ADC_InitStructure.ADC_NbrOfConversion = ARRAYSIZE;
 		      //load structure values to control and status registers
 		      ADC_Init(ADC1, &ADC_InitStructure);
-		      //wake up temperature sensor
-		      //ADC_TempSensorVrefintCmd(ENABLE);
+
+
+
+
 		      //configure each channel
-		      /*
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_0, 1, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 2, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_2, 3, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_3, 4, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_4, 5, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_5, 6, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_5, 7, ADC_SampleTime_41Cycles5);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_7, 8, ADC_SampleTime_41Cycles5);
-		      */
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_0,1, ADC_SampleTime_48Cycles);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_1,2, ADC_SampleTime_48Cycles);
-		      ADC_RegularChannelConfig(ADC1, ADC_Channel_2,3, ADC_SampleTime_48Cycles);
 
-		      //Enable ADC1
-		      ADC_Cmd(ADC1, ENABLE);
-		      //enable DMA for ADC
-		      ADC_DMACmd(ADC1, ENABLE);
-		      //Enable ADC1 reset calibration register
-		      //ADC_ResetCalibration(ADC1);
-		      //Check the end of ADC1 reset calibration register
-		      //while(ADC_GetResetCalibrationStatus(ADC1));
-		      //Start ADC1 calibration
-		      //ADC_StartCalibration(ADC1);
-		      //Check the end of ADC1 calibration
-		      //while(ADC_GetCalibrationStatus(ADC1));
+		      ADC_RegularChannelConfig(ADC1, ADC_Channel_0,1, ADC_SampleTime_192Cycles);
+		      ADC_RegularChannelConfig(ADC1, ADC_Channel_1,2, ADC_SampleTime_192Cycles);
+		      ADC_RegularChannelConfig(ADC1, ADC_Channel_2,3, ADC_SampleTime_192Cycles);
+
+
+		      /* Enable ADC1 Power Down during Delay */
+			  ADC_PowerDownCmd(ADC1, ADC_PowerDown_Idle_Delay, ENABLE);
+
+			  /* Enable DMA1 clock */
+			   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+
+			   /* DMA1 channel1 configuration */
+			   DMA_DeInit(DMA1_Channel1);
+			   DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR;
+			   DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&ADC_values[0];
+			   DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
+			   DMA_InitStructure.DMA_BufferSize = ARRAYSIZE;
+			   DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+			   DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+			   DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+			   DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+			   DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
+			   DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+			   DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+			   DMA_Init(DMA1_Channel1, &DMA_InitStructure);
+
+			   /* Enable DMA Stream Half / Transfer Complete interrupt */
+			   DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT, ENABLE);
+
+			   /* Enable DMA1 channel1 */
+			   DMA_Cmd(DMA1_Channel1, ENABLE);
+
+			   /* Enable the request after last transfer for DMA Circular mode */
+			   ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
+
+			   /* Enable ADC1 DMA */
+			   ADC_DMACmd(ADC1, ENABLE);
+
+			   /* Enable ADC1 */
+			   ADC_Cmd(ADC1, ENABLE);
+
+			   /* Wait until ADC1 ON status */
+			   while(ADC_GetFlagStatus(ADC1, ADC_FLAG_ADONS) == RESET);
+
+			   /* Start ADC1 Software Conversion */
+			   ADC_SoftwareStartConv(ADC1);
 
 }
 
-void InitDMA()
-{
-	//enable DMA1 clock
-	    RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-	    //create DMA structure
-	    DMA_InitTypeDef  DMA_InitStructure;
-	    //reset DMA1 channe1 to default values;
-	    DMA_DeInit(DMA1_Channel1);
-	    //channel will be used for memory to memory transfer
-	    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-	    //setting normal mode (non circular)
-	    DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
-	    //medium priority
-	    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
-	    //source and destination data size word=32bit
-	    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-	    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
-	    //automatic memory destination increment enable.
-	    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-	    //source address increment disable
-	    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-	    //Location assigned to peripheral register will be source
-	    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
-	    //chunk of data to be transfered
-	    DMA_InitStructure.DMA_BufferSize = ARRAYSIZE;
-	    //source and destination start addresses
-	    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)ADC1_DR;
-	    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&ADC_values[0];
-	    //send values to DMA registers
-	    DMA_Init(DMA1_Channel1, &DMA_InitStructure);
-	    // Enable DMA1 Channel Transfer Complete interrupt
-	    DMA_ITConfig(DMA1_Channel1, DMA_IT_TC, ENABLE);
-	    DMA_Cmd(DMA1_Channel1, ENABLE); //Enable the DMA1 - Channel1
-	    NVIC_InitTypeDef NVIC_InitStructure;
-	    //Enable DMA1 channel IRQ Channel */
-	    NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel1_IRQn;
-	    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-	    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	    NVIC_Init(&NVIC_InitStructure);
-}
+
 
 //  handling TIM2 interrupt for DAC conversion
 
@@ -342,6 +339,7 @@ void TIM2_IRQHandler()
     if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET)
     {
 
+    			TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
 
     			//DACtimer=TIM_GetCounter(TIM2);
     			/*	based on
@@ -368,29 +366,61 @@ void TIM2_IRQHandler()
     	    			  (accumulator1step+accumulator2step+accumulator3step)/3.0;
     	    	  }
 
+
     	    	  // sending 12-bits output signal
     	    	  DAC_SetChannel1Data(DAC_Align_12b_R,DAC1OutputData);
+    	    	  DAC_SetChannel2Data(DAC_Align_12b_R,DAC1OutputData);
+
+
 
     	    	  // changing accumulator register in time ....
 
-    	    	  /*
+
     	    	  accumulator1r+=R>>6;
     	    	  accumulator2r-=R>>4;
     	    	  accumulator3r+=R>>8;
-    	    	  */
+
     	    	  // reading value of pots from ADC_value table
+    	    	  /*
     	    	  accumulator1r=(uint32_t)257374*
     	    	     	    	  	  		rangeScaleLinear(ADC_values[0],0,4095,100,5000);
+
+
     	    	  accumulator2r=(uint32_t)257374*
     	    	     	    	     	    rangeScaleLinear(ADC_values[1],0,4095,100,5000);
 
     	    	  accumulator3r=(uint32_t)257374*
-    	    	     	    	     	    	rangeScaleLinear(ADC_values[2],0,4095,100,5000);
+    	    	     	    	     	    rangeScaleLinear(ADC_values[2],0,4095,100,5000);
 
-    	    	  TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
-
+				  */
 
     }
 
+}
+// DMA IQR handler for ADC conversions
+
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* Test on DMA Channel Half Transfer interrupt */
+  if (DMA_GetITStatus(DMA1_IT_HT1))
+  {
+    /* Clear DMA Channel Half Transfer interrupt pending bit */
+    DMA_ClearITPendingBit(DMA1_IT_HT1);
+    //GPIO_WriteBit(GPIOC, GPIO_Pin_9, Bit_SET);
+    GPIO_ToggleBits(GPIOC,GPIO_Pin_8);
+
+    // Add code here to process first half of buffer (ping)
+  }
+
+  /* Test on DMA Channel Transfer Complete interrupt */
+  if (DMA_GetITStatus(DMA1_IT_TC1))
+  {
+    /* Clear DMA Channel Transfer Complete interrupt pending bit */
+    DMA_ClearITPendingBit(DMA1_IT_TC1);
+   // GPIO_WriteBit(GPIOC, GPIO_Pin_9, Bit_SET);
+    GPIO_ToggleBits(GPIOC,GPIO_Pin_9);
+
+    // Add code here to process second half of buffer (pong)
+  }
 }
 
