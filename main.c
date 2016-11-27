@@ -64,7 +64,8 @@ void TimingDelay_Decrement(void);  // used in SysTick_Handler function
 void Delay(__IO uint32_t nTime);
 
 void InitDAC();
-void InitADC();
+void InitADCDMA();
+void InitADCSingle();
 
 static __IO uint32_t TimingDelay;
 
@@ -108,11 +109,15 @@ int main(void)
     while(RCC_GetFlagStatus(RCC_FLAG_HSIRDY) == RESET);
 
     InitDAC();
-    InitADC();
-
-
+    InitADCDMA();
+    //InitADCSingle();
+    ADC_values[0]=2000;
   // endless loop
     while(1) {
+    	/* ADC_SoftwareStartConv(ADC1);
+
+    	     ADC_values[0] = ADC_GetConversionValue(ADC1); //Read ADC value
+    	*/
 
     }
 }
@@ -206,7 +211,8 @@ void InitDAC()
 }
 
 
-void InitADC()
+
+void InitADCDMA()
 {
 	/*
 	https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=%2Fpublic%2FSTe2ecommunities%2Fmcu%2FLists%2Fcortex%5Fmx%5Fstm32%2FMultiple%20Channel%20ADC%20on%20STM32%20L1%20Discovery%20with%20CooCox&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=359
@@ -258,20 +264,6 @@ void InitADC()
 		       ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
 		       ADC_InitStructure.ADC_NbrOfConversion = ARRAYSIZE; // =3
 		       ADC_Init(ADC1,&ADC_InitStructure);
-
-		     // ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;
-		      //We will convert multiple channels
-		      ADC_InitStructure.ADC_ScanConvMode = ENABLE;
-		      //select continuous conversion mode
-		      ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;//!
-		      //select no external triggering
-		      ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
-		      //right 12-bit data alignment in ADC data register
-		      ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
-		      //83 channels conversion
-		      ADC_InitStructure.ADC_NbrOfConversion = ARRAYSIZE;
-		      //load structure values to control and status registers
-		      ADC_Init(ADC1, &ADC_InitStructure);
 
 
 
@@ -328,6 +320,52 @@ void InitADC()
 }
 
 
+void InitADCSingle()
+{
+
+	 ADC_InitTypeDef ADC_InitStructure;
+
+	 // pin configuration
+	 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+	 	GPIO_InitTypeDef GPIO_InitStructure; //Variable used to setup the GPIO pins
+	 		      //==Configure ADC pins (PA0 -> Channel 0 to PA1 -> Channel 1) as analog inputs==
+	 	GPIO_StructInit(&GPIO_InitStructure); // Reset init structure, if not it can cause issues...
+	 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1| GPIO_Pin_2| GPIO_Pin_3;
+	 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;
+	 	GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+
+    //ADC1 configuration
+
+    /* Clear  ADC configuration   */
+     ADC_DeInit(ADC1);
+
+     /* ADC Configuration */
+   	ADC_InitStructure.ADC_Resolution = ADC_Resolution_12b;
+   	ADC_InitStructure.ADC_ScanConvMode = DISABLE; // One channel
+   	ADC_InitStructure.ADC_ContinuousConvMode = ENABLE; // Continuously back-to-back, not triggered
+   	ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None; // Not triggered
+   	ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T9_CC2; // Not used, valid placeholder
+    ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+   	ADC_InitStructure.ADC_NbrOfConversion = 1; // =3
+   	ADC_Init(ADC1,&ADC_InitStructure);
+
+   	ADC_RegularChannelConfig(ADC1, ADC_Channel_0,1, ADC_SampleTime_192Cycles);
+   	ADC_RegularChannelConfig(ADC1, ADC_Channel_0,1, ADC_SampleTime_192Cycles);
+   	ADC_RegularChannelConfig(ADC1, ADC_Channel_0,1, ADC_SampleTime_192Cycles);
+	   /* Enable ADC1 */
+	   ADC_Cmd(ADC1, ENABLE);
+
+	   /* Wait until ADC1 ON status */
+	   while(ADC_GetFlagStatus(ADC1, ADC_FLAG_ADONS) == RESET);
+
+	   /* Start ADC1 Software Conversion */
+	   ADC_SoftwareStartConv(ADC1);
+
+    // ADC_values[0] = ADC_GetConversionValue(ADC1); //Read ADC value
+}
+
+
 
 //  handling TIM2 interrupt for DAC conversion
 
@@ -363,7 +401,7 @@ void TIM2_IRQHandler()
 
     	    	  {
     	    	  DAC1OutputData = (uint16_t)
-    	    			  (accumulator1step+accumulator2step+accumulator3step)/3.0;
+    	    			  (accumulator1step+accumulator1step+accumulator1step)/3.0;
     	    	  }
 
 
@@ -375,17 +413,18 @@ void TIM2_IRQHandler()
 
     	    	  // changing accumulator register in time ....
 
-
+    	    	  /*
     	    	  accumulator1r+=R>>6;
     	    	  accumulator2r-=R>>4;
     	    	  accumulator3r+=R>>8;
-
+				  */
     	    	  // reading value of pots from ADC_value table
-    	    	  /*
+
     	    	  accumulator1r=(uint32_t)257374*
     	    	     	    	  	  		rangeScaleLinear(ADC_values[0],0,4095,100,5000);
-
-
+    	    	  accumulator1r=(uint32_t)257374*
+    	        	    	     	    	  	  		rangeScaleLinear(1000,0,4095,100,5000);
+    	    	  /*
     	    	  accumulator2r=(uint32_t)257374*
     	    	     	    	     	    rangeScaleLinear(ADC_values[1],0,4095,100,5000);
 
