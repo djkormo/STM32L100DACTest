@@ -26,7 +26,9 @@ NVIC_InitTypeDef         	DACNVIC_InitStructure;
 
 #define ARRAYSIZE 3
 #define ADC1_DR    ((uint32_t)0x4001244C)
+#define ADC1_DR_ADDRESS    ((uint32_t)0x40012458)
 volatile uint16_t ADC_values[ARRAYSIZE];
+__IO uint16_t ADC_ConvertedValue;
 volatile uint32_t status = 0;
 
 volatile uint16_t R =5730;
@@ -63,9 +65,10 @@ volatile uint16_t lutindex;
 void TimingDelay_Decrement(void);  // used in SysTick_Handler function
 void Delay(__IO uint32_t nTime);
 
-void InitDAC();
-void InitADCDMA();
-void InitADCSingle();
+void InitDAC(void);
+void InitADCDMA(void);
+void InitADCSingle(void);
+void ADC_DMA_Config(void);
 
 static __IO uint32_t TimingDelay;
 
@@ -111,7 +114,8 @@ int main(void)
     InitDAC();
     InitADCDMA();
     //InitADCSingle();
-    ADC_values[0]=2000;
+    //ADC_DMA_Config();
+    //ADC_values[0]=2000;
   // endless loop
     while(1) {
     	/* ADC_SoftwareStartConv(ADC1);
@@ -149,7 +153,7 @@ void Delay(__IO uint32_t nTime)
 		  ;
 }
 
-void InitDAC()
+void InitDAC(void)
 {
 	/* DAC  clock enable */
 
@@ -212,7 +216,7 @@ void InitDAC()
 
 
 
-void InitADCDMA()
+void InitADCDMA(void)
 {
 	/*
 	https://my.st.com/public/STe2ecommunities/mcu/Lists/cortex_mx_stm32/Flat.aspx?RootFolder=%2Fpublic%2FSTe2ecommunities%2Fmcu%2FLists%2Fcortex%5Fmx%5Fstm32%2FMultiple%20Channel%20ADC%20on%20STM32%20L1%20Discovery%20with%20CooCox&FolderCTID=0x01200200770978C69A1141439FE559EB459D7580009C4E14902C3CDE46A77F0FFD06506F5B&currentviews=359
@@ -283,7 +287,7 @@ void InitADCDMA()
 
 			   /* DMA1 channel1 configuration */
 			   DMA_DeInit(DMA1_Channel1);
-			   DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR;
+			   DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)ADC1_DR_ADDRESS;// was  &ADC1->DR;
 			   DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&ADC_values[0];
 			   DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
 			   DMA_InitStructure.DMA_BufferSize = ARRAYSIZE;
@@ -320,7 +324,7 @@ void InitADCDMA()
 }
 
 
-void InitADCSingle()
+void InitADCSingle(void)
 {
 
 	 ADC_InitTypeDef ADC_InitStructure;
@@ -363,6 +367,109 @@ void InitADCSingle()
 	   ADC_SoftwareStartConv(ADC1);
 
     // ADC_values[0] = ADC_GetConversionValue(ADC1); //Read ADC value
+}
+
+
+void ADC_DMA_Config(void)
+{
+
+	ADC_InitTypeDef ADC_InitStructure;
+	DMA_InitTypeDef DMA_InitStructure;
+	GPIO_InitTypeDef GPIO_InitStructure;
+	 NVIC_InitTypeDef NVIC_InitStructure;
+  /*------------------------ DMA1 configuration ------------------------------*/
+  /* Enable DMA1 clock */
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+  /* DMA1 channel1 configuration */
+  DMA_DeInit(DMA1_Channel1);
+  DMA_InitStructure.DMA_PeripheralBaseAddr = ADC1_DR_ADDRESS;
+  DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&ADC_ConvertedValue;
+  DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
+  DMA_InitStructure.DMA_BufferSize = 1;
+  DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+  DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Disable;
+  DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+  DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+  DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
+  DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+  DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+  DMA_Init(DMA1_Channel1, &DMA_InitStructure);
+
+  /* Enable DMA1 channel1 */
+  DMA_Cmd(DMA1_Channel1, ENABLE);
+
+  /*----------------- ADC1 configuration with DMA enabled --------------------*/
+  /* Enable the HSI oscillator */
+  RCC_HSICmd(ENABLE);
+
+#if defined (USE_STM32L152_EVAL)
+  /* Enable GPIOB clock */
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+  /* Configure PA.12 (ADC Channel18) in analog mode */
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1| GPIO_Pin_2| GPIO_Pin_3;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AN;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+#elif defined (USE_STM32L152D_EVAL)
+
+  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+    /* Configure PA.12 (ADC Channel18) in analog mode */
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1| GPIO_Pin_2| GPIO_Pin_3;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AN;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+#endif
+
+  /* Check that HSI oscillator is ready */
+  while(RCC_GetFlagStatus(RCC_FLAG_HSIRDY) == RESET);
+
+  /* Enable ADC1 clock */
+  RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
+  /* ADC1 configuration */
+  ADC_InitStructure.ADC_ScanConvMode = ENABLE;
+  ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;
+  ADC_InitStructure.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_None;
+  ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;
+  ADC_InitStructure.ADC_NbrOfConversion = 1;
+  ADC_Init(ADC1, &ADC_InitStructure);
+
+#if defined (USE_STM32L152_EVAL)
+  /* ADC1 regular channel18 configuration */
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 1, ADC_SampleTime_192Cycles);
+#elif defined (USE_STM32L152D_EVAL)
+  /* ADC1 regular channel14 configuration */
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_1, 1, ADC_SampleTime_192Cycles);
+#endif
+
+  /* Enable the request after last transfer for DMA Circular mode */
+  ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
+
+  /* Enable ADC1 DMA */
+  ADC_DMACmd(ADC1, ENABLE);
+
+  /* Enable ADC1 */
+  ADC_Cmd(ADC1, ENABLE);
+
+  /* Wait until the ADC1 is ready */
+  while(ADC_GetFlagStatus(ADC1, ADC_FLAG_ADONS) == RESET)
+  {
+  }
+
+
+  /* Enable the DMA Stream IRQ Channel */
+    NVIC_InitStructure.NVIC_IRQChannel = DMA1_Channel1_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+
+  /* Start ADC1 Software Conversion */
+  ADC_SoftwareStartConv(ADC1);
+
+
+
+
 }
 
 
@@ -421,9 +528,11 @@ void TIM2_IRQHandler()
     	    	  // reading value of pots from ADC_value table
 
     	    	  accumulator1r=(uint32_t)257374*
-    	    	     	    	  	  		rangeScaleLinear(ADC_values[0],0,4095,100,5000);
+    	    	     	    	  	  		rangeScaleLinear(ADC_values[1],0,4095,200,5000);
+    	    	  /*
     	    	  accumulator1r=(uint32_t)257374*
     	        	    	     	    	  	  		rangeScaleLinear(1000,0,4095,100,5000);
+    	        	    	     	    	  	  		*/
     	    	  /*
     	    	  accumulator2r=(uint32_t)257374*
     	    	     	    	     	    rangeScaleLinear(ADC_values[1],0,4095,100,5000);
